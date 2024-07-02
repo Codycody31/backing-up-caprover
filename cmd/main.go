@@ -83,9 +83,7 @@ func main() {
 		log.Fatalf("Error initializing logger: %v", err)
 	}
 
-	// TODO: Validate sections of the config, for example adding or remove trailing slashes
-
-	// TODO: Perform system checks, for example if the backup path is writable, or ensure the folder exists
+	// Perform system checks, for example if the backup path is writable, or ensure the folder exists
 	err = systemChecks(config)
 	if err != nil {
 		logger.Log(logpkg.ERROR, fmt.Sprintf("System checks failed: %v", err))
