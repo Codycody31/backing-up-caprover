@@ -160,6 +160,13 @@ func (l *Logger) Log(level LogLevel, message string, options ...LogOption) {
 	l.log(entry)
 }
 
+func (l *Logger) Close() {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+
+	l.file.Close()
+}
+
 // WithServer adds a server to the log entry
 func WithServer(server string) LogOption {
 	return func(entry *LogEntry) {
