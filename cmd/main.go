@@ -29,9 +29,18 @@ type CaproverConfig struct {
 	Password string `yaml:"password"`
 }
 
+type Volume struct {
+	Name string `json:"name"`
+}
+
 type ServerSettings struct {
 	DisableCaproverBackup bool `yaml:"disableCaproverBackup"` // Disable CapRover backup
 	DisableVolumeBackup   bool `yaml:"disableVolumeBackup"`   // Disable volume backup
+
+	// TODO: Ability to define explicit volumes to backup
+	// by default we use exclude, but if include is defined, we only backup those volumes
+	IncludeVolumes []Volume `yaml:"includeVolumes"` // Volumes to include in backup
+	ExcludeVolumes []Volume `yaml:"excludeVolumes"` // Volumes to exclude from backup
 }
 
 type Server struct {
@@ -75,6 +84,12 @@ func main() {
 	}
 
 	// TODO: Validate sections of the config, for example adding or remove trailing slashes
+
+	// TODO: Perform system checks, for example if the backup path is writable, or ensure the folder exists
+	err = systemChecks(config)
+	if err != nil {
+		logger.Log(logpkg.ERROR, fmt.Sprintf("System checks failed: %v", err))
+	}
 
 	logger.Log(logpkg.WELCOME, "Starting CapRover Backup..")
 
@@ -238,35 +253,20 @@ func backupCaprover(server Server, config Config) error {
 	logger.Log(logpkg.SUCCESS, "Backup created successfully", logpkg.WithServer(server.Host))
 
 	// generate random name for backup file
-	backupFileName := fmt.Sprintf("backup-%s-%s.tar", server.Host, time.Now().Format("2006-01-02-15-04-05"))
+	backupFileName := fmt.Sprintf("%s/backup-%s-%s.tar", config.BackupPath, server.Host, time.Now().Format("2006-01-02-15-04-05"))
 
 	logger.Log(logpkg.INFO, "Downloading backup...", logpkg.WithServer(server.Host))
 	err = downloadFile(backupFileName, fmt.Sprintf("%s/api/v2/downloads/?namespace=captain&downloadToken=%s", server.Caprover.URL, downloadToken))
 	if err != nil {
 		return fmt.Errorf("failed to download backup: %v", err)
 	}
-	logger.Log(logpkg.SUCCESS, "Backup downloaded successfully", logpkg.WithServer(server.Host))
 
 	backupFileInfo, err := os.Stat(backupFileName)
 	if err != nil {
 		return fmt.Errorf("failed to get file size for backup.tar: %v", err)
 	}
 
-	// Create backup directory if it doesn't exist
-	if _, err := os.Stat(config.BackupPath); os.IsNotExist(err) {
-		err = os.Mkdir(config.BackupPath, 0755)
-		if err != nil {
-			return fmt.Errorf("failed to create backup directory: %v", err)
-		}
-		logger.Log(logpkg.INFO, fmt.Sprintf("Created backup directory %s", config.BackupPath), logpkg.WithServer(server.Host))
-	}
-
-	logger.Log(logpkg.INFO, fmt.Sprintf("Moving backup to %s...", config.BackupPath), logpkg.WithServer(server.Host))
-	err = moveFile(backupFileName, fmt.Sprintf("%s/backup-%s-%s.tar", config.BackupPath, server.Host, time.Now().Format("2006-01-02-15-04-05")))
-	if err != nil {
-		return fmt.Errorf("failed to move downloaded backup file to correct file location: %v", err)
-	}
-	logger.Log(logpkg.SUCCESS, fmt.Sprintf("Backup moved successfully (%s)", byteCountSI(backupFileInfo.Size())), logpkg.WithServer(server.Host))
+	logger.Log(logpkg.SUCCESS, fmt.Sprintf("Backup downloaded successfully  (%s)", byteCountSI(backupFileInfo.Size())), logpkg.WithServer(server.Host))
 
 	err = ntfy(config.Ntfy.URL+"cron", config.Ntfy.Token, fmt.Sprintf("CapRover Backup: %s", server.Host), 3, []string{"tada"}, fmt.Sprintf("Backup completed successfully at %s, backup size: %s", time.Now().Format("2006/01/02 15:04:05"), byteCountSI(backupFileInfo.Size())))
 	if err != nil {
@@ -507,4 +507,17 @@ func muxShell(w io.Writer, r io.Reader) (chan<- string, <-chan string) {
 		}
 	}()
 	return in, out
+}
+
+func systemChecks(config Config) error {
+	// Create backup directory if it doesn't exist
+	if _, err := os.Stat(config.BackupPath); os.IsNotExist(err) {
+		err = os.Mkdir(config.BackupPath, 0755)
+		if err != nil {
+			return fmt.Errorf("failed to create backup directory: %v", err)
+		}
+		logger.Log(logpkg.INFO, fmt.Sprintf("Created backup directory %s", config.BackupPath))
+	}
+
+	return nil
 }
