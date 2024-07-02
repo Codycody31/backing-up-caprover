@@ -93,6 +93,8 @@ func main() {
 
 	var wg sync.WaitGroup
 
+	var failedServers []string
+
 	// Backup CapRover on each server
 	for _, server := range config.Servers {
 		wg.Add(1)
@@ -105,7 +107,9 @@ func main() {
 
 			err := backupCaprover(s, config)
 			if err != nil {
+				failedServers = append(failedServers, s.Host)
 				logger.Log(logpkg.ERROR, fmt.Sprintf("Failed to backup CapRover: %v", err), logpkg.WithServer(s.Host))
+				_ = ntfy(config.Ntfy.URL+"cron", config.Ntfy.Token, fmt.Sprintf("CapRover Backup: %s", s.Host), 3, []string{"tada"}, fmt.Sprintf("Backup failed at %s: %s", time.Now().Format("2006/01/02 15:04:05"), err.Error()))
 			}
 		}(server)
 	}
@@ -122,13 +126,19 @@ func main() {
 
 			err := backupVolumes(s, config)
 			if err != nil {
+				failedServers = append(failedServers, s.Host)
 				logger.Log(logpkg.ERROR, fmt.Sprintf("Failed to backup volumes: %v", err), logpkg.WithServer(s.Host))
+				_ = ntfy(config.Ntfy.URL+"cron", config.Ntfy.Token, fmt.Sprintf("CapRover Volume Backup: %s", s.Host), 3, []string{"tada"}, fmt.Sprintf("Volume backup failed at %s: %s", time.Now().Format("2006/01/02 15:04:05"), err.Error()))
 			}
 		}(server)
 	}
 
 	wg.Wait()
-	logger.Log(logpkg.SUCCESS, "All backups completed successfully")
+	if len(failedServers) > 0 {
+		logger.Log(logpkg.ERROR, fmt.Sprintf("Failed to backup servers: %v", failedServers))
+	} else {
+		logger.Log(logpkg.SUCCESS, "All backups completed successfully")
+	}
 }
 
 func backupVolumes(server Server, config Config) error {
