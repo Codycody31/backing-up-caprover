@@ -92,6 +92,7 @@ func main() {
 
 	logger, err = logpkg.NewLogger(config.LogFile, 5) // Log file with max size 5MB
 	if err != nil {
+		_ = ntfy(config.Ntfy.URL+"cron", config.Ntfy.Token, "CapRover Backup", 3, []string{"tada"}, fmt.Sprintf("Error initializing logger: %s", err))
 		log.Fatalf("Error initializing logger: %v", err)
 	}
 	defer logger.Close()
